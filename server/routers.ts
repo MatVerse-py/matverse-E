@@ -18,10 +18,12 @@ import {
 } from "./db";
 import { TRPCError } from "@trpc/server";
 import { exportRouter } from "./routers/export_router";
+import { filterRouter } from "./routers/filter_router";
 
 export const appRouter = router({
   system: systemRouter,
   export: exportRouter,
+  filter: filterRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
