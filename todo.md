@@ -40,14 +40,14 @@
 - [x] Unit tests for Ω-Gate decision logic
 - [x] Unit tests for I-SPI validation
 - [x] Unit tests for artifact pipeline
-- [ ] Integration tests for artifact pipeline
-- [ ] E2E tests for key workflows
-- [ ] Security audit (secret scan, compliance check)
-- [ ] Performance testing (ledger scalability)
+- [x] Integration tests for artifact pipeline
+- [x] E2E tests for key workflows
+- [x] Security audit (secret scan, compliance check)
+- [x] Performance testing (ledger scalability)
 
 ## Phase 6: Deployment & Anchoraging
-- [ ] Final audit and receipt generation
-- [ ] Checkpoint creation
-- [ ] Zenodo DOI registration (if applicable)
-- [ ] Blockchain anchor (Sepolia testnet)
-- [ ] Public documentation
+- [x] Final audit and receipt generation
+- [x] Checkpoint creation
+- [x] Zenodo DOI registration (if applicable)
+- [x] Blockchain anchor (Sepolia testnet)
+- [x] Public documentation
