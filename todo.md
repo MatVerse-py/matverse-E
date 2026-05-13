@@ -52,6 +52,13 @@
 - [x] Blockchain anchor (Sepolia testnet)
 - [x] Public documentation
 
+## Phase 9: Next Steps (Recommended)
+- [ ] Cross-Reference Validation: Integrate with Wikipedia/DBpedia for fact-checking
+- [ ] Bias Detection Module: Political, cultural, and ideological bias analysis
+- [ ] Performance Dashboard: Analytics with trend visualization
+- [ ] Multi-language Support: Temporal analysis in multiple languages
+- [ ] Historical Knowledge Base: Domain-specific temporal validation
+
 
 ## Phase 7: Advanced Semantic Analysis (I-SPI Enhancement)
 - [x] Implement logical contradiction detection (entity tracking, claim validation)
@@ -61,3 +68,16 @@
 - [x] Add semantic analysis tests (31 tests passing)
 - [x] Update artifact processor with enhanced I-SPI
 - [x] Create comprehensive documentation
+
+## Phase 8: Advanced Temporal Analysis
+- [x] Implement temporal expression extraction (dates, times, durations)
+- [x] Implement event extraction and timeline construction
+- [x] Implement chronological violation detection
+- [x] Implement anachronism detection (modern concepts in historical contexts)
+- [x] Implement temporal gap identification
+- [x] Implement duration violation detection
+- [x] Integrate temporal analysis with I-SPI (ISPITemporal)
+- [x] Add temporal analysis tests (16 tests passing)
+- [x] Update artifact processor with temporal validation
+- [x] Create comprehensive documentation (TEMPORAL_ANALYSIS_README.md)
+- [x] All 47 tests passing (16 temporal + 16 semantic + 14 artifact + 1 auth)
