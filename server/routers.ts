@@ -17,9 +17,11 @@ import {
   updateOmegaGateDecisionStatus,
 } from "./db";
 import { TRPCError } from "@trpc/server";
+import { exportRouter } from "./routers/export_router";
 
 export const appRouter = router({
   system: systemRouter,
+  export: exportRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
