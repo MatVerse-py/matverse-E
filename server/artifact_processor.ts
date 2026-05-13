@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { invokeLLM } from "./_core/llm";
 import { OmegaGate, OmegaGateDecision, SemanticRiskLevel } from "./omega_gate";
 import { ISPI } from "./i_spi";
+import { ISPIEnhanced } from "./i_spi_enhanced";
+import { MisinformationDetector } from "./misinformation_detector";
 import { appendLedgerEntry, createOmegaGateDecision, createArtifact } from "./db";
 
 export interface ArtifactSubmission {
@@ -17,6 +19,8 @@ export interface ProcessingResult {
   reasoning: string;
   iSpiValid: boolean;
   iSpiIssues: string[];
+  semanticScore: number;
+  misinformationRisk: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   llmAnalysis?: string;
   integrityMetrics: {
     psi: number;
@@ -25,11 +29,17 @@ export interface ProcessingResult {
   };
   operationHash: string;
   ledgerEntryId?: number;
+  advancedAnalysis?: {
+    contradictions: number;
+    coherenceScore: number;
+    misinformationPatterns: number;
+    sourceReliability: number;
+  };
 }
 
 /**
  * Artifact Processor: Orchestrates the full pipeline for artifact evaluation.
- * Integrates I-SPI validation, LLM analysis, and Ω-Gate decision.
+ * Integrates I-SPI validation, Enhanced I-SPI with advanced semantic analysis, LLM analysis, and Ω-Gate decision.
  */
 export class ArtifactProcessor {
   /**
@@ -39,24 +49,52 @@ export class ArtifactProcessor {
     const artifactId = submission.id || `artifact-${Date.now()}`;
     const contentHash = crypto.createHash("sha256").update(submission.content).digest("hex");
 
-    // Step 1: I-SPI Validation
+    // Step 1: I-SPI Validation (Basic)
     const iSpiResult = ISPI.validate(submission.content);
 
-    // Step 2: LLM Analysis for semantic risk
+    // Step 1b: Enhanced I-SPI with Advanced Semantic Analysis
+    const enhancedIspResult = await ISPIEnhanced.validate(submission.content);
+    const misinfoProfile = MisinformationDetector.detect(submission.content);
+
+    // Step 2: Map enhanced I-SPI results to risk level
     let llmRiskLevel: SemanticRiskLevel = "LOW";
+    if (enhancedIspResult.misinformationRisk === "CRITICAL") {
+      llmRiskLevel = "CRITICAL";
+    } else if (enhancedIspResult.misinformationRisk === "HIGH") {
+      llmRiskLevel = "HIGH";
+    } else if (enhancedIspResult.misinformationRisk === "MEDIUM") {
+      llmRiskLevel = "MEDIUM";
+    }
+
+    // Step 3: LLM Analysis for semantic risk
     let llmAnalysis = "";
 
     try {
+      // Use enhanced semantic analysis in LLM context
+      const semanticContext = `
+Semantic Analysis Results:
+- Semantic Score: ${(enhancedIspResult.semanticScore * 100).toFixed(1)}%
+- Coherence Score: ${(enhancedIspResult.coherenceScore * 100).toFixed(1)}%
+- Contradiction Score: ${(enhancedIspResult.contradictionScore * 100).toFixed(1)}%
+- Misinformation Risk: ${enhancedIspResult.misinformationRisk}
+- Source Reliability: ${(misinfoProfile.reliability * 100).toFixed(1)}%
+- Detected Patterns: ${misinfoProfile.indicators.length}
+
+Analysis Issues:
+${enhancedIspResult.issues.map((i) => `- ${i}`).join("\n")}
+`;
+
       const llmResponse = await invokeLLM({
         messages: [
           {
             role: "system",
-            content: `You are a semantic integrity analyzer. Evaluate the following artifact for semantic laundering, misinformation, or integrity issues. 
+            content: `You are a semantic integrity analyzer. Evaluate the following artifact for semantic laundering, misinformation, or integrity issues.
+            Consider the provided semantic analysis results.
             Respond with JSON: { "riskLevel": "LOW|MEDIUM|HIGH|CRITICAL", "analysis": "brief explanation" }`,
           },
           {
             role: "user",
-            content: `Analyze this artifact for semantic integrity:\n\n${submission.content.slice(0, 2000)}`,
+            content: `Semantic Analysis Context:\n${semanticContext}\n\nArtifact to analyze:\n${submission.content.slice(0, 2000)}`,
           },
         ],
         response_format: {
@@ -84,18 +122,17 @@ export class ArtifactProcessor {
 
       if (llmResponse.choices?.[0]?.message?.content) {
         const content = llmResponse.choices[0].message.content;
-        const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+        const contentStr = typeof content === "string" ? content : JSON.stringify(content);
         const parsed = JSON.parse(contentStr);
         llmRiskLevel = parsed.riskLevel;
         llmAnalysis = parsed.analysis;
       }
     } catch (error) {
-      console.warn("[LLM] Analysis failed, defaulting to LOW risk:", error);
-      llmRiskLevel = "LOW";
-      llmAnalysis = "LLM analysis unavailable";
+      console.warn("[LLM] Analysis failed, using semantic analysis results:", error);
+      llmAnalysis = `Semantic analysis: ${enhancedIspResult.misinformationRisk} risk with ${misinfoProfile.indicators.length} patterns detected`;
     }
 
-    // Step 3: Ω-Gate Decision
+    // Step 4: Ω-Gate Decision
     const omegaVerdict = await OmegaGate.evaluate({
       artifactId,
       content: submission.content,
@@ -105,14 +142,14 @@ export class ArtifactProcessor {
       iSpiValid: iSpiResult.valid,
     });
 
-    // Step 4: Compute operation hash
+    // Step 5: Compute operation hash
     const operationHash = OmegaGate.computeOperationHash({
       artifactId,
       decision: omegaVerdict.decision,
       timestamp: Date.now(),
     });
 
-    // Step 5: Store artifact metadata
+    // Step 6: Store artifact metadata
     try {
       await createArtifact({
         artifactId,
@@ -125,7 +162,7 @@ export class ArtifactProcessor {
       console.warn("[Artifact] Failed to store metadata:", error);
     }
 
-    // Step 6: Create Ω-Gate decision record
+    // Step 7: Create Ω-Gate decision record
     try {
       await createOmegaGateDecision({
         artifactId,
@@ -137,7 +174,7 @@ export class ArtifactProcessor {
       console.warn("[OmegaGate] Failed to store decision:", error);
     }
 
-    // Step 7: Append to immutable ledger
+    // Step 8: Append to immutable ledger
     try {
       await appendLedgerEntry({
         artifactId,
@@ -161,9 +198,17 @@ export class ArtifactProcessor {
       reasoning: omegaVerdict.reasoning,
       iSpiValid: iSpiResult.valid,
       iSpiIssues: iSpiResult.issues,
+      semanticScore: enhancedIspResult.semanticScore,
+      misinformationRisk: enhancedIspResult.misinformationRisk,
       llmAnalysis,
       integrityMetrics: omegaVerdict.integrityMetrics,
       operationHash,
+      advancedAnalysis: {
+        contradictions: enhancedIspResult.semanticAnalysis.contradictions,
+        coherenceScore: enhancedIspResult.coherenceScore,
+        misinformationPatterns: enhancedIspResult.semanticAnalysis.misinformationPatterns,
+        sourceReliability: misinfoProfile.reliability,
+      },
     };
   }
 
@@ -173,23 +218,45 @@ export class ArtifactProcessor {
   static async evaluate(submission: ArtifactSubmission): Promise<Omit<ProcessingResult, "ledgerEntryId">> {
     const artifactId = submission.id || `artifact-eval-${Date.now()}`;
 
-    // I-SPI Validation
+    // I-SPI Validation (Basic)
     const iSpiResult = ISPI.validate(submission.content);
 
-    // LLM Analysis
+    // Enhanced I-SPI with Advanced Semantic Analysis
+    const enhancedIspResult = await ISPIEnhanced.validate(submission.content);
+    const misinfoProfile = MisinformationDetector.detect(submission.content);
+
+    // Map enhanced I-SPI results to risk level
     let llmRiskLevel: SemanticRiskLevel = "LOW";
+    if (enhancedIspResult.misinformationRisk === "CRITICAL") {
+      llmRiskLevel = "CRITICAL";
+    } else if (enhancedIspResult.misinformationRisk === "HIGH") {
+      llmRiskLevel = "HIGH";
+    } else if (enhancedIspResult.misinformationRisk === "MEDIUM") {
+      llmRiskLevel = "MEDIUM";
+    }
+
+    // LLM Analysis
     let llmAnalysis = "";
 
     try {
+      const semanticContext = `
+Semantic Analysis Results:
+- Semantic Score: ${(enhancedIspResult.semanticScore * 100).toFixed(1)}%
+- Coherence Score: ${(enhancedIspResult.coherenceScore * 100).toFixed(1)}%
+- Contradiction Score: ${(enhancedIspResult.contradictionScore * 100).toFixed(1)}%
+- Misinformation Risk: ${enhancedIspResult.misinformationRisk}
+- Source Reliability: ${(misinfoProfile.reliability * 100).toFixed(1)}%
+`;
+
       const llmResponse = await invokeLLM({
         messages: [
           {
             role: "system",
-            content: `Evaluate semantic integrity. Respond with JSON: { "riskLevel": "LOW|MEDIUM|HIGH|CRITICAL", "analysis": "brief" }`,
+            content: `Evaluate semantic integrity. Consider the provided analysis. Respond with JSON: { "riskLevel": "LOW|MEDIUM|HIGH|CRITICAL", "analysis": "brief" }`,
           },
           {
             role: "user",
-            content: `Analyze:\n\n${submission.content.slice(0, 2000)}`,
+            content: `Semantic Context:\n${semanticContext}\n\nArtifact:\n${submission.content.slice(0, 2000)}`,
           },
         ],
       });
@@ -197,17 +264,18 @@ export class ArtifactProcessor {
       if (llmResponse.choices?.[0]?.message?.content) {
         try {
           const content = llmResponse.choices[0].message.content;
-          const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+          const contentStr = typeof content === "string" ? content : JSON.stringify(content);
           const parsed = JSON.parse(contentStr);
           llmRiskLevel = parsed.riskLevel;
           llmAnalysis = parsed.analysis;
         } catch {
           const content = llmResponse.choices[0].message.content;
-          llmAnalysis = typeof content === 'string' ? content : JSON.stringify(content);
+          llmAnalysis = typeof content === "string" ? content : JSON.stringify(content);
         }
       }
     } catch (error) {
       console.warn("[LLM] Evaluation failed:", error);
+      llmAnalysis = `Semantic analysis: ${enhancedIspResult.misinformationRisk} risk`;
     }
 
     // Ω-Gate Decision
@@ -233,9 +301,17 @@ export class ArtifactProcessor {
       reasoning: omegaVerdict.reasoning,
       iSpiValid: iSpiResult.valid,
       iSpiIssues: iSpiResult.issues,
+      semanticScore: enhancedIspResult.semanticScore,
+      misinformationRisk: enhancedIspResult.misinformationRisk,
       llmAnalysis,
       integrityMetrics: omegaVerdict.integrityMetrics,
       operationHash,
+      advancedAnalysis: {
+        contradictions: enhancedIspResult.semanticAnalysis.contradictions,
+        coherenceScore: enhancedIspResult.coherenceScore,
+        misinformationPatterns: enhancedIspResult.semanticAnalysis.misinformationPatterns,
+        sourceReliability: misinfoProfile.reliability,
+      },
     };
   }
 }
