@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import SubmitArtifact from "./pages/SubmitArtifact";
 import Ledger from "./pages/Ledger";
 import OmegaGatePanel from "./pages/OmegaGatePanel";
+import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/submit" component={SubmitArtifact} />
       <Route path="/ledger" component={Ledger} />
       <Route path="/omega-gate" component={OmegaGatePanel} />
+      <Route path="/analytics" component={AnalyticsDashboard} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
